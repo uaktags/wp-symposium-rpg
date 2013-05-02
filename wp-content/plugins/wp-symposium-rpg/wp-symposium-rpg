@@ -1,0 +1,238 @@
+<?php
+/*
+   Plugin Name: WP Symposium RPG
+   Plugin URI: http://wordpress.org/extend/plugins/wp-symposium-rpg/
+   Version: 0.1
+   Author: <a href="http://tagsolutions.tk">Tim G.</a>
+   Description: RPG Elements added to WPS
+   Text Domain: wp-symposium-rpg
+   License: GPL3
+  */
+
+/*
+
+    This following part of this file is part of WordPress Plugin Template for WordPress.
+
+    WordPress Plugin Template is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    WordPress Plugin Template is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Contact Form to Database Extension.
+    If not, see <http://www.gnu.org/licenses/>.
+*/
+  //////////////////////////////////
+	// Run initialization
+	/////////////////////////////////
+
+	/*
+	 * Don't start on every page, the plugin page is enough.
+	 */
+	 if(is_admin()){
+	    add_action('admin_init', 'RegisterSettings');
+		if ( ! empty ( $GLOBALS['pagenow'] ) && 'plugins.php' === $GLOBALS['pagenow'] )
+			add_action( 'admin_notices', 'WpSymposiumRPG_check_admin_notices', 0 );
+
+		$wps_options_pages = array(
+			'symposium_rpg_options',
+			'symposium_options',
+			'symposium_profile', 
+			'wp-symposium/plus_admin.php',
+			'symposium_forum',
+			'__wps__mail_menu',
+			'__wps__members_menu',
+			'wp-symposium/groups_admin.php',
+			'wp-symposium/gallery_admin.php',
+			'wp-symposium/news_admin.php',
+			'wp-symposium/symposium_bar.php',
+			'wp-symposium/events_admin.php',
+			'wp-symposium/__wps__mobile_.php',
+			'wp-symposium/mailinglist_admin.php',
+			'wp-symposium/lounge_admin.php');
+
+		if ( ! empty ( $GLOBALS['pagenow'] ) && 'admin.php' === $GLOBALS['pagenow'] && in_array($_GET['page'], $wps_options_pages) )
+			add_action('admin_footer', 'WpSymposiumRPG_options_page_hack');
+	}
+
+	/**
+	 * Test current system for the features the plugin needs.
+	 *
+	 * @return array Errors or empty array
+	 */
+	function WpSymposiumRPG_check_plugin_requirements()
+	{
+		$errors = array ();
+
+		if ( !defined('WPS_WL') ) 
+			$errors[] = "You must install and activate WP-Symposium before activating
+				this plugin!";
+		return $errors;
+
+	}
+
+	/**
+	 * Call WpSymposiumRPG_check_plugin_requirements() and deactivate this plugin if there are error.
+	 *
+	 * @wp-hook admin_notices
+	 * @return  void
+	 */
+	function WpSymposiumRPG_check_admin_notices()
+	{
+		$errors = WpSymposiumRPG_check_plugin_requirements();
+		if ( empty ( $errors ) )
+			return;
+		
+		
+		// Suppress "Plugin activated" notice.
+		unset( $_GET['activate'] );
+
+		// this plugin's name
+		$name = get_file_data( __FILE__, array ( 'Plugin Name' ), 'plugin' );
+
+		printf(
+			'<div class="error"><p>%1$s</p>
+			<p><i>%2$s</i> has been deactivated.</p></div>',
+			join( '</p><p>', $errors ),
+			$name[0]
+		);
+		deactivate_plugins( plugin_basename( __FILE__ ) );
+	}
+
+function RegisterSettings()
+{
+    // Add options to database if they don't already exist
+    add_option(WPS_OPTIONS_PREFIX."_rpg_global_list", "", "", "yes");
+    add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_point', "", "", "yes");
+    add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_new_thread', "", "", "yes");
+	add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_new_reply', "", "", "yes");
+    add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_profile_status', "", "", "yes");
+    add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_profile_comment', "", "", "yes");
+	add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_follow', "", "", "yes");
+    add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_like', "", "", "yes");
+
+    // Register settings that this form is allowed to update
+    register_setting('rpg_settings', WPS_OPTIONS_PREFIX."_rpg_global_list");
+    register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_point');
+    register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_new_thread');
+	register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_new_reply');
+    register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_profile_status');
+    register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_profile_comment');
+	register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_follow');
+	register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_like');
+}
+	//////////////////////////////////
+	// End initialization
+	/////////////////////////////////
+	
+	//////////////////////////////////
+	// Start Options Page
+	/////////////////////////////////
+	
+	/*
+	 * Options Page Hack
+	 * Adds Link to Admin->WPS->Options
+	*/
+	function WpSymposiumRPG_options_page_hack (){
+		if($_GET['page'] == "symposium_rpg_options")
+			$active = "active";
+		else
+			$active = "inactive";
+		
+		echo "<script type='text/javascript' src='" . plugins_url('/script.js?value='.$active, __FILE__)."'></script>";
+		//echo "<script type='text/javascirpt'>hack_wps_option_menu();</script>";
+	}
+
+	/*
+	 * Options Page
+	 * Actual WPSymposiumRPG Options Page
+	*/
+	function symposium_rpg_options() {
+		include_once('wp-symposium-rpg-admin.php');
+	}
+
+	/*
+	 * Creates Menu Page
+	*/
+	function add_rpg_to_admin_menu()
+	{
+		$hidden = get_option(WPS_OPTIONS_PREFIX.'_long_menu') == "on" ? '_hidden': '';
+		add_submenu_page( 'symposium_debug'.$hidden, __('Symposium RPG', WPS_TEXT_DOMAIN), __('Symposium RPG', WPS_TEXT_DOMAIN), 'manage_options', 'symposium_rpg_options', 'symposium_rpg_options' );
+	}
+
+	 function print_section_info(){
+	print 'Enter your setting below:';
+    }
+	
+     function create_an_id_field(){
+        ?><input type="text" id="input_whatever_unique_id_I_want" name="array_key[some_id]" value="<?=get_option('test_some_id');?>" /><?php
+    }
+	
+	//////////////////////////////////
+	// End Options Page
+	//////////////////////////////////
+	
+	//////////////////////////////////
+	// Actions and Hooks
+	//////////////////////////////////
+	add_action('__wps__admin_menu_hook', 'add_rpg_to_admin_menu');
+	add_action('symposium_bonus_increment_hook', 'symposium_bonus_increment', 10,2);
+	//////////////////////////////////
+	// End Actions And Hooks
+	//////////////////////////////////
+	
+	//////////////////////////////////
+	// RPG Functions
+	//////////////////////////////////
+	function symposium_bonus_increment($arg1, $arg2){
+		global $wpdb;
+				/* Argument2 holds the name of the action. Possible values:
+				'new_thread' : When a new thread is created 
+				'new_reply' : When a new reply is created on thread
+				'profile-status' : When a new Profile Status is made
+				'profile-comment' : When a new comment is created on a profile status
+				'follow' : When you follow someone
+				'like' : When you like someone
+				/
+				/
+				These values should cordinate with the settings db name
+				*/
+			if ( get_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_point') == "on"){
+				$bonus = 0;
+				switch ( $arg2 ){
+					case 'new_thread':
+						$bonus = get_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_new_thread');
+					case 'new_reply':
+						$bonus = get_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_new_reply');
+					case 'profile-status':
+						$bonus = get_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_profile_status');
+					case 'profile-comment':
+						$bonus = get_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_profile_comment');
+					case 'follow':
+						$bonus = get_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_follow');
+					case 'like':
+						$bonus = get_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_like');
+				}
+        /*Originally I used a custom DB-Table for settings, before going to WP_OPTIONS. 
+         *But now WP_OPTIONS isn't working correctly.
+         *Must test to figure out why $bonus isn't updating correctly
+        */
+				//$sql = "SELECT name, value FROM ".$wpdb->prefix."rpg_settings WHERE name = %s";
+				//$new_topic_bonus = $wpdb->get_row($wpdb->prepare($sql, $arg2));
+				$sql = "SELECT race, hp, level FROM ".$wpdb->base_prefix."symposium_usermeta WHERE uid = %d";
+				$wpsrpg = $wpdb->get_row($wpdb->prepare($sql, $arg1));
+				$newhp = $wpsrpg->hp + $bonus;
+				$sql = "UPDATE ".$wpdb->prefix."symposium_usermeta SET  hp=%d WHERE uid = %d";
+				$wpdb->query( $wpdb->prepare( $sql, $newhp, $arg1));
+				//exit;
+			}
+	}
+
+	//////////////////////////////////
+	// End RPG Functions
+	//////////////////////////////////
