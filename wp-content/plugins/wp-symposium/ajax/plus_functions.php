@@ -342,8 +342,6 @@ if ($_POST['action'] == 'toggle_following') {
 			echo __('Unfollow', WPS_TEXT_DOMAIN);
 		}
 		
-		// Support for RPG-WPs
-		do_action('symposium_bonus_increment', $current_user->ID, 'follow');
 
 	} else {
 		
@@ -390,8 +388,6 @@ if ($_POST['action'] == 'likeDislike') {
 		// Support for CubePoints
 		do_action('symposium_profile_like_hook', $author->author_uid, $choice);
 		
-		// Support for RPG-WPs
-		do_action('symposium_bonus_increment', $current_user->ID, 'like');
 		
 		if (__wps__get_meta($author->author_uid, 'notify_likes')) {
 			
