@@ -68,10 +68,28 @@
 	function WpSymposiumRPG_check_plugin_requirements()
 	{
 		$errors = array ();
-
-		if ( !defined('WPS_WL') ) 
+		global $wpdb;
+		$wpdb->show_errors();
+		if ( !defined('WPS_WL') ) {
 			$errors[] = "You must install and activate WP-Symposium before activating
 				this plugin!";
+		}else{
+			if (  get_option(WPS_OPTIONS_PREFIX.'_rpg_installed') != 1) {
+				$sql = "ALTER TABLE  `".$wpdb->prefix."symposium_usermeta` ";
+				$sql .= "ADD  `hp` INT NOT NULL DEFAULT  '100', ";
+				$sql .= "ADD  `xp` INT NOT NULL DEFAULT  '0', ";
+				$sql .= "ADD  `strength` INT NOT NULL DEFAULT  '5', ";
+				$sql .= "ADD  `defense` INT NOT NULL DEFAULT  '5', ";
+				$sql .= "ADD  `level` INT NOT NULL DEFAULT  '1'";
+				if ($wpdb->query( $sql ) != FALSE){
+					update_option(WPS_OPTIONS_PREFIX.'_rpg_installed', "1");
+				} else {
+					$errors[] = "You had an error occur!<br />";
+					$errors[] =  $wpdb->last_error;
+				}
+				
+			}
+		}
 		return $errors;
 
 	}
@@ -104,24 +122,76 @@
 		deactivate_plugins( plugin_basename( __FILE__ ) );
 	}
 
-function RegisterSettings()
+	function WpSymposiumRPG_on_activation()
 {
-    // Add options to database if they don't already exist
-    add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_point', "", "", "yes");
-    add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_new_thread', "", "", "yes");
-	add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_new_reply', "", "", "yes");
-    add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_profile_status', "", "", "yes");
-    add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_new_comment_reply', "", "", "yes");
-    add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_like', "", "", "yes");
+    if ( ! current_user_can( 'activate_plugins' ) )
+        return;
+    $plugin = isset( $_REQUEST['plugin'] ) ? $_REQUEST['plugin'] : '';
+    check_admin_referer( "activate-plugin_{$plugin}" );
 
-    // Register settings that this form is allowed to update
-    register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_point');
-    register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_new_thread');
-	register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_new_reply');
-    register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_profile_status');
-    register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_new_comment_reply');
-	register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_like');
+    # Uncomment the following line to see the function in action
+    # exit( var_dump( $_GET ) );
 }
+
+	function WpSymposiumRPG_on_deactivation()
+	{
+		if ( ! current_user_can( 'activate_plugins' ) )
+			return;
+		$plugin = isset( $_REQUEST['plugin'] ) ? $_REQUEST['plugin'] : '';
+		check_admin_referer( "deactivate-plugin_{$plugin}" );
+
+		# Uncomment the following line to see the function in action
+		# exit( var_dump( $_GET ) );
+	}
+
+	function WpSymposiumRPG_on_uninstall()
+	{
+		if ( ! current_user_can( 'activate_plugins' ) )
+			return;
+		check_admin_referer( 'bulk-plugins' );
+
+		// Important: Check if the file is the one
+		// that was registered during the uninstall hook.
+		if ( __FILE__ != WP_UNINSTALL_PLUGIN )
+			return;
+
+		# Uncomment the following line to see the function in action
+		# exit( var_dump( $_GET ) );
+		$sql = "ALTER TABLE  `".$wpdb->prefix."symposium_usermeta` ";
+		$sql .= "DROP  `hp, ";
+		$sql .= "DROP  `xp`, ";
+		$sql .= "DROP  `strength`, ";
+		$sql .= "DROP  `defense`, ";
+		$sql .= "DROP  `level`";
+		if ($wpdb->query( $sql ) != FALSE){
+			update_option(WPS_OPTIONS_PREFIX.'_rpg_installed', "0");
+		} else {
+			$errors[] = "You had an error occur!<br />";
+			$errors[] =  $wpdb->last_error;
+		}
+	}
+
+		
+	function RegisterSettings()
+	{
+		// Add options to database if they don't already exist
+		add_option(WPS_OPTIONS_PREFIX.'_rpg_installed', "", "", "yes");
+		add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_point', "", "", "yes");
+		add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_new_thread', "", "", "yes");
+		add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_new_reply', "", "", "yes");
+		add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_profile_status', "", "", "yes");
+		add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_new_comment_reply', "", "", "yes");
+		add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_like', "", "", "yes");
+
+		// Register settings that this form is allowed to update
+		register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_installed');
+		register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_point');
+		register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_new_thread');
+		register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_new_reply');
+		register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_profile_status');
+		register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_new_comment_reply');
+		register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_like');
+	}
 	//////////////////////////////////
 	// End initialization
 	/////////////////////////////////
@@ -162,13 +232,6 @@ function RegisterSettings()
 		add_submenu_page( 'symposium_debug'.$hidden, __('Symposium RPG', WPS_TEXT_DOMAIN), __('Symposium RPG', WPS_TEXT_DOMAIN), 'manage_options', 'symposium_rpg_options', 'symposium_rpg_options' );
 	}
 
-	 function print_section_info(){
-	print 'Enter your setting below:';
-    }
-	
-     function create_an_id_field(){
-        ?><input type="text" id="input_whatever_unique_id_I_want" name="array_key[some_id]" value="<?=get_option('test_some_id');?>" /><?php
-    }
 	
 	//////////////////////////////////
 	// End Options Page
@@ -177,6 +240,10 @@ function RegisterSettings()
 	//////////////////////////////////
 	// Actions and Hooks
 	//////////////////////////////////
+	register_activation_hook(   __FILE__, 'WpSymposiumRPG_on_activation' );
+	register_deactivation_hook( __FILE__, 'WpSymposiumRPG_on_deactivation' );
+	register_uninstall_hook(    __FILE__, 'WpSymposiumRPG_on_uninstall' );
+	
 	add_action('__wps__admin_menu_hook', 'add_rpg_to_admin_menu');
 	add_action('symposium_bonus_increment_hook', 'symposium_bonus_increment', 10,2);
 	
@@ -245,15 +312,92 @@ function RegisterSettings()
 				}
 				//$sql = "SELECT name, value FROM ".$wpdb->prefix."rpg_settings WHERE name = %s";
 				//$new_topic_bonus = $wpdb->get_row($wpdb->prepare($sql, $arg2));
-				$sql = "SELECT race, hp, level FROM ".$wpdb->base_prefix."symposium_usermeta WHERE uid = %d";
+				$sql = "SELECT xp, hp, level FROM ".$wpdb->base_prefix."symposium_usermeta WHERE uid = %d";
 				$wpsrpg = $wpdb->get_row($wpdb->prepare($sql, $arg1));
-				$newhp = $wpsrpg->hp + $bonus;
-				$sql = "UPDATE ".$wpdb->prefix."symposium_usermeta SET hp=%d WHERE uid = %d";
+				$newhp = $wpsrpg->xp + $bonus;
+				$sql = "UPDATE ".$wpdb->prefix."symposium_usermeta SET xp=%d WHERE uid = %d";
 				$wpdb->query( $wpdb->prepare( $sql, $newhp, $arg1));
 				//exit;
 			}
 	}
-
+	
+	function __WPS__RPG__Get_Forum_Stats($uid){
+		global $wpdb, $current_user; 
+		if ( isset ( $uid ) ) {
+			$sql = "SELECT xp, hp, level FROM ".$wpdb->base_prefix."symposium_usermeta WHERE uid = %d";
+			if ( $wpsrpg = $wpdb->get_row($wpdb->prepare($sql, $uid)) != null){
+				$wpsrpg = $wpdb->get_row($wpdb->prepare($sql, $uid));
+				$html = "<div name='WPS-RPG'>";
+				$html .= "HP: " . $wpsrpg->hp . "<br />";
+				$html .= "XP: " . $wpsrpg->xp . "<br />";
+				$html .= "Level: " . $wpsrpg->level . "<br />";
+				if ($uid != $current_user->ID && WpSymposiumRPG_is_playing($current_user->ID)){
+					$html .= "<form id='attack' action='" /*. plugins_url('/ajax/attack_functions.php', __FILE__) */ . "' method='post'>";
+					$html .= "<input type='hidden' name='action' value='attack' />";
+					$html .= "<input type='hidden' name='enemy-id' value='".$uid."' />";
+					$html .= "<input type='hidden' name='attacker-id' value='".$current_user->ID."' />";
+					$html .= "<input type='submit' name='Submit' class='button-primary' value='".__('Attack', WPS_TEXT_DOMAIN)."'	/>";
+					$html .= "</form>";
+				}
+				$html .= "</div>";
+			} else {
+				$html = "<div name='WPS-RPG'>";
+				$html .= "Not Playing RPG";
+				$html .= "</div>";
+			}
+			return $html;
+		}
+	}
+	function WpSymposiumRPG_is_playing($uid){
+		global $wpdb, $current_user; 
+		$sql = "SELECT xp, hp, level FROM ".$wpdb->base_prefix."symposium_usermeta WHERE uid = %d";
+		if ( $wpsrpg = $wpdb->get_row($wpdb->prepare($sql, $uid)) != null){
+		 return true;
+		 exit;
+		 }
+		 return false;
+	}
+	if( ! is_admin() ){
+		add_action('wp_footer', '__WPS__RPG__js_for_attacks');
+		if(isset($_POST['action']) && $_POST['action'] == 'attack'){
+			//WpSymposiumRPG_Attack($_POST['attacker-id'], $_POST['enemy-id']);
+		}
+	}
+	
+	function __WPS__RPG__js_for_attacks(){
+		echo '<script type="text/javascript">';
+		echo '<!--//--><![CDATA[//><!--';
+		echo '$(document).ready(function() {';
+		echo "$('form#attack').submit(function() {";
+		echo "$('form#attack .error').remove();";
+		echo "var hasError = false;";
+		echo "$('.requiredField').each(function() {";
+		echo "		if($.trim($(this).val()) == '') {";
+		echo "			var labelText = $(this).prev('label').text();";
+		echo "				$(this).parent().append('<span class=";
+		echo '"error"';
+		echo ">Your forgot to enter your '+labelText+'.</span>');";
+		echo "$(this).addClass('inputError');";
+		echo "hasError = true;";
+		echo "} else if($(this).hasClass('email')) {";
+		echo "var emailReg = /^([\w-\.]+@([\w-]+\.)+[\w-]{2,4})?$/;";
+		echo "if(!emailReg.test($.trim($(this).val()))) {";
+		echo "var labelText = $(this).prev('label').text();";
+		echo "$(this).parent().append('<span class=error>Sorry! You\'ve entered an invalid '+labelText+'.</span>');";
+		echo "$(this).addClass('inputError');";
+		echo "hasError = true;";
+		echo "}";
+		echo "}";
+				echo"});";
+				echo"return false;";	
+			echo "});});//-->!]]>";
+			echo "</script>";
+	
+	}
+	
+	function WpSymposiumRPG_Attack($attacker, $defender){
+		
+	}
 	//////////////////////////////////
 	// End RPG Functions
 	//////////////////////////////////
