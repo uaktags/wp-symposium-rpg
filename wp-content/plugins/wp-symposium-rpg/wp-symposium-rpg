@@ -27,7 +27,7 @@
     along with Contact Form to Database Extension.
     If not, see <http://www.gnu.org/licenses/>.
 */
-  //////////////////////////////////
+	//////////////////////////////////
 	// Run initialization
 	/////////////////////////////////
 
@@ -107,23 +107,19 @@
 function RegisterSettings()
 {
     // Add options to database if they don't already exist
-    add_option(WPS_OPTIONS_PREFIX."_rpg_global_list", "", "", "yes");
     add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_point', "", "", "yes");
     add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_new_thread', "", "", "yes");
 	add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_new_reply', "", "", "yes");
     add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_profile_status', "", "", "yes");
-    add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_profile_comment', "", "", "yes");
-	add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_follow', "", "", "yes");
+    add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_new_comment_reply', "", "", "yes");
     add_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_like', "", "", "yes");
 
     // Register settings that this form is allowed to update
-    register_setting('rpg_settings', WPS_OPTIONS_PREFIX."_rpg_global_list");
     register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_point');
     register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_new_thread');
 	register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_new_reply');
     register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_profile_status');
-    register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_profile_comment');
-	register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_follow');
+    register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_new_comment_reply');
 	register_setting('rpg_settings', WPS_OPTIONS_PREFIX.'_rpg_bonus_like');
 }
 	//////////////////////////////////
@@ -153,6 +149,7 @@ function RegisterSettings()
 	 * Actual WPSymposiumRPG Options Page
 	*/
 	function symposium_rpg_options() {
+		global $wpdb, $current_user; 
 		include_once('wp-symposium-rpg-admin.php');
 	}
 
@@ -182,6 +179,32 @@ function RegisterSettings()
 	//////////////////////////////////
 	add_action('__wps__admin_menu_hook', 'add_rpg_to_admin_menu');
 	add_action('symposium_bonus_increment_hook', 'symposium_bonus_increment', 10,2);
+	
+	add_action('symposium_profile_newpost_hook', 'symposium_hook_hack_addStatus');
+	function symposium_hook_hack_addStatus(){
+		symposium_bonus_increment( $current_user->ID, 'profile-status' );
+		return true;
+	}
+	add_action('symposium_profile_like_hook', 'symposium_hook_hack_like');
+	function symposium_hook_hack_like(){
+		symposium_bonus_increment( $current_user->ID, 'like' );
+		return true;
+	}
+	add_action('__wps__forum_newtopic_hook', 'symposium_hook_hack_newthread');
+	function symposium_hook_hack_newthread(){
+		symposium_bonus_increment( $current_user->ID, 'new_thread' );
+		return true;
+	}
+	add_action('symposium_forum_reply_hook', 'symposium_hook_hack_newreply');
+	function symposium_hook_hack_newreply(){
+		symposium_bonus_increment( $current_user->ID, 'new_reply' );
+		return true;
+	}
+	add_action('symposium_forum_replycomment_hook', 'symposium_hook_hack_newcommentreply');
+	function symposium_hook_hack_newcommentreply(){
+		symposium_bonus_increment( $current_user->ID, 'new_comment_reply' );
+		return true;
+	}
 	//////////////////////////////////
 	// End Actions And Hooks
 	//////////////////////////////////
@@ -190,14 +213,13 @@ function RegisterSettings()
 	// RPG Functions
 	//////////////////////////////////
 	function symposium_bonus_increment($arg1, $arg2){
-		global $wpdb;
+		global $wpdb, $current_user;
 				/* Argument2 holds the name of the action. Possible values:
 				'new_thread' : When a new thread is created 
 				'new_reply' : When a new reply is created on thread
 				'profile-status' : When a new Profile Status is made
-				'profile-comment' : When a new comment is created on a profile status
-				'follow' : When you follow someone
-				'like' : When you like someone
+				'new_comment_reply' : When a new comment on a Forum Reply is made (?)
+				'like' : When a new like is generated
 				/
 				/
 				These values should cordinate with the settings db name
@@ -207,27 +229,26 @@ function RegisterSettings()
 				switch ( $arg2 ){
 					case 'new_thread':
 						$bonus = get_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_new_thread');
+						break;
 					case 'new_reply':
 						$bonus = get_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_new_reply');
+						break;
 					case 'profile-status':
 						$bonus = get_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_profile_status');
-					case 'profile-comment':
-						$bonus = get_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_profile_comment');
-					case 'follow':
-						$bonus = get_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_follow');
+						break;
+					case 'new_comment_reply':
+						$bonus = get_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_new_comment_reply');
+						break;
 					case 'like':
 						$bonus = get_option(WPS_OPTIONS_PREFIX.'_rpg_bonus_like');
+						break;
 				}
-        /*Originally I used a custom DB-Table for settings, before going to WP_OPTIONS. 
-         *But now WP_OPTIONS isn't working correctly.
-         *Must test to figure out why $bonus isn't updating correctly
-        */
 				//$sql = "SELECT name, value FROM ".$wpdb->prefix."rpg_settings WHERE name = %s";
 				//$new_topic_bonus = $wpdb->get_row($wpdb->prepare($sql, $arg2));
 				$sql = "SELECT race, hp, level FROM ".$wpdb->base_prefix."symposium_usermeta WHERE uid = %d";
 				$wpsrpg = $wpdb->get_row($wpdb->prepare($sql, $arg1));
 				$newhp = $wpsrpg->hp + $bonus;
-				$sql = "UPDATE ".$wpdb->prefix."symposium_usermeta SET  hp=%d WHERE uid = %d";
+				$sql = "UPDATE ".$wpdb->prefix."symposium_usermeta SET hp=%d WHERE uid = %d";
 				$wpdb->query( $wpdb->prepare( $sql, $newhp, $arg1));
 				//exit;
 			}
