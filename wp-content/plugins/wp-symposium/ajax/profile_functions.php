@@ -395,8 +395,6 @@ if ($_POST['action'] == 'addStatus') {
 		// Hook for other actions to take place
 		do_action('symposium_profile_newpost_hook', $subject_uid, $author_uid, $new_id, $text);	
 		
-		// Support for RPG-WPs
-		do_action('symposium_bonus_increment', $current_user->ID, 'profile-status');
 		
 		exit;
 			
@@ -506,8 +504,6 @@ if ($_POST['action'] == 'addComment') {
 			
 				$reply_recipients = $wpdb->get_results($wpdb->prepare($sql, $parent, $current_user->ID));
 				
-				// Support for RPG-WPs
-				do_action('symposium_bonus_increment', $current_user->ID, 'profile-comment');
 			
 				
 				if ($reply_recipients) {
