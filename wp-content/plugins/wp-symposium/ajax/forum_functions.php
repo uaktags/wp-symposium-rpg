@@ -425,9 +425,6 @@ if ($_POST['action'] == 'forumNewPost') {
 		$post = __('Started a new forum topic:', WPS_TEXT_DOMAIN).' <a href="'.$url.'">'.$new_topic_subject.'</a>';
 		do_action('__wps__forum_newtopic_hook', $current_user->ID, $current_user->display_name, $current_user->ID, $post, 'forum', $new_tid);			
 		
-		// Support for RPG-WPs
-		do_action('symposium_bonus_increment_hook', $current_user->ID, 'new_thread');
-		
 		// Return new Topic ID
 		echo $new_tid.'[|]'.$url;
 		exit;	
@@ -805,8 +802,6 @@ if ($_POST['action'] == 'replycomment') {
 			// Hook for more actions
 			do_action('symposium_forum_replycomment_hook', $current_user->ID, $current_user->display_name, $new_id);			
 		
-			// Support for RPG-WPs
-			do_action('symposium_bonus_increment', $current_user->ID, 'new_reply');
 			
 			// Send back id of comment so email notifications can be sent out
 			echo $new_id;
