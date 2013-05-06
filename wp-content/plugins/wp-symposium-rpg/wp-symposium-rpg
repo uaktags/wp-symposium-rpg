@@ -9,7 +9,24 @@
    License: GPL3
   */
 
+/*
 
+    This following part of this file is part of WordPress Plugin Template for WordPress.
+
+    WordPress Plugin Template is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    WordPress Plugin Template is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Contact Form to Database Extension.
+    If not, see <http://www.gnu.org/licenses/>.
+*/
 	//////////////////////////////////
 	// Run initialization
 	/////////////////////////////////
@@ -58,17 +75,10 @@
 				this plugin!";
 		}else{
 			if (  get_option(WPS_OPTIONS_PREFIX.'_rpg_installed') != 1) {
-				$sql = "ALTER TABLE  `".$wpdb->prefix."symposium_usermeta` ";
-				$sql .= "ADD  `hp` INT NOT NULL DEFAULT  '100', ";
-				$sql .= "ADD  `xp` INT NOT NULL DEFAULT  '0', ";
-				$sql .= "ADD  `strength` INT NOT NULL DEFAULT  '5', ";
-				$sql .= "ADD  `defense` INT NOT NULL DEFAULT  '5', ";
-				$sql .= "ADD  `level` INT NOT NULL DEFAULT  '1'";
-				if ($wpdb->query( $sql ) != FALSE){
+				if (check_tables() != FALSE){
 					update_option(WPS_OPTIONS_PREFIX.'_rpg_installed', "1");
 				} else {
 					$errors[] = "You had an error occur!<br />";
-					$errors[] =  $wpdb->last_error;
 				}
 				
 			}
@@ -114,6 +124,9 @@
 
     # Uncomment the following line to see the function in action
     # exit( var_dump( $_GET ) );
+	get_current_users_activated();
+	check_tables();
+	check_wps_for_rpg();
 }
 
 	function WpSymposiumRPG_on_deactivation()
@@ -122,9 +135,12 @@
 			return;
 		$plugin = isset( $_REQUEST['plugin'] ) ? $_REQUEST['plugin'] : '';
 		check_admin_referer( "deactivate-plugin_{$plugin}" );
-
 		# Uncomment the following line to see the function in action
 		# exit( var_dump( $_GET ) );
+		if (file_exists(WPS_PLUGIN_DIR.'/functions.php.bak')){
+			copy ( WPS_PLUGIN_DIR.'/functions.php.bak', WPS_PLUGIN_DIR.'/functions.php');
+			unlink(WPS_PLUGIN_DIR.'/functions.php.bak');
+		}
 	}
 
 	function WpSymposiumRPG_on_uninstall()
@@ -137,7 +153,6 @@
 		// that was registered during the uninstall hook.
 		if ( __FILE__ != WP_UNINSTALL_PLUGIN )
 			return;
-
 		# Uncomment the following line to see the function in action
 		# exit( var_dump( $_GET ) );
 		$sql = "ALTER TABLE  `".$wpdb->prefix."symposium_usermeta` ";
@@ -147,9 +162,14 @@
 		$sql .= "DROP  `defense`, ";
 		$sql .= "DROP  `level`";
 		if ($wpdb->query( $sql ) != FALSE){
-			update_option(WPS_OPTIONS_PREFIX.'_rpg_installed', "0");
+			if ( $wpdb->query ("DROP TABLE `" . $wpdb->prefix. "symposium_attack_log`") != FALSE){
+				update_option(WPS_OPTIONS_PREFIX.'_rpg_installed', "0");
+			} else { 
+				$errors[] = "You had an error occur! Attack Log wasn't DROPPED!<br />";
+				$errors[] =  $wpdb->last_error;
+			}
 		} else {
-			$errors[] = "You had an error occur!<br />";
+			$errors[] = "You had an error occur! USERMETA wasn't changed back!<br />";
 			$errors[] =  $wpdb->last_error;
 		}
 	}
@@ -227,6 +247,7 @@
 	register_deactivation_hook( __FILE__, 'WpSymposiumRPG_on_deactivation' );
 	register_uninstall_hook(    __FILE__, 'WpSymposiumRPG_on_uninstall' );
 	
+	add_action('user_register', 'WpSymposiumRPG_user_register');
 	add_action('__wps__admin_menu_hook', 'add_rpg_to_admin_menu');
 	add_action('symposium_bonus_increment_hook', 'symposium_bonus_increment', 10,2);
 	
@@ -343,8 +364,9 @@
 	if( ! is_admin() ){
 		add_action('wp_footer', '__WPS__RPG__js_for_attacks');
 		if(isset($_POST['action']) && $_POST['action'] == 'attack'){
-			//WpSymposiumRPG_Attack($_POST['attacker-id'], $_POST['enemy-id']);
+			WpSymposiumRPG_Attack($_POST['attacker-id'], $_POST['enemy-id']);
 		}
+		
 	}
 	
 	function __WPS__RPG__js_for_attacks(){
@@ -379,8 +401,239 @@
 	}
 	
 	function WpSymposiumRPG_Attack($attacker, $defender){
+		global $wpdb;
+		$attack = array();
+		$defend = array();
+		$attack['sql'] = "SELECT xp, hp, level, strength, defense FROM ".$wpdb->base_prefix."symposium_usermeta WHERE uid = %d";
+		if ( $attack['result'] = $wpdb->get_row($wpdb->prepare($attack['sql'], $attacker)) != null){
+				$attack['result'] = $wpdb->get_row($wpdb->prepare($attack['sql'], $attacker));
+		}
+		$defend['sql'] = "SELECT xp, hp, level, strength, defense FROM ".$wpdb->base_prefix."symposium_usermeta WHERE uid = %d";
 		
+		if ( $defend['result'] = $wpdb->get_row($wpdb->prepare($defend['sql'], $defender)) != null){
+				$defend['result'] = $wpdb->get_row($wpdb->prepare($defend['sql'], $defender));
+		}		
+		$attack['score'] = calculate_scores($attack['result']->xp, $attack['result']->hp, $attack['result']->level, $attacker);
+		$defend['score'] = calculate_scores($defend['result']->xp, $defend['result']->hp, $defend['result']->level, $defender);
+		//echo $attack['score'] . " : " . $defend['score']; die;
+		if ( $attack['score'] >= $defend['score'] ){ //attacker wins
+			$defend['min'] = max(0, ($defend['result']->strength + $defend['result']->defense) - 3);
+			$defend['max'] = $defend['result']->strength + $defend['result']->defense + 2;
+			$defend['damage'] = rand($defend['min'], $defend['max']);
+			$attack['min'] = max(0, ($attack['result']->strength + $attack['result']->defense) - 3);
+			$attack['max'] = $attack['result']->strength + $attack['result']->defense + 2;
+			$attack['damage'] = rand($attack['min'], $attack['max']);
+			$attack['xp'] = $attack['result']->level * rand(4, 6);
+			update_results_battle($attack['xp'], $attacker, $attack['damage'], $defender, $defend['damage'], $attacker, $defender);
+		} else { //attacker loses
+			$attack['min'] = max(0, ($attack['result']->strength + $attack['result']->defense) - 3);
+			$attack['max'] = $attack['result']->strength + $attack['result']->defense + 2;
+			$attack['damage'] = rand($attack['min'], $attack['max']);
+			$defend['min'] = max(0, ($defend['result']->strength + $defend['result']->defense) - 3);
+			$defend['max'] = $defend['result']->strength + $defend['result']->defense + 2;
+			$defend['damage'] = rand($defend['min'], $defend['max']);
+			$defend['xp'] = $defend['result']->level * rand( 4, 7);
+			update_results_battle($defend['xp'], $defender, $defend['damage'], $attacker, $attacker['damage'], $attacker, $defender);
+		}
 	}
+	
+	function update_results_battle($winxp, $winid, $windam, $loseid, $losedam, $attacker, $defender){
+		global $wpdb;
+		$wpdb->insert( 
+			$wpdb->base_prefix."symposium_attack_log", 
+			array( 
+				'attacker' => $attacker,
+				'defender' => $defender,
+				'winner' => $winid				
+			), 
+			array(  
+				'%d',
+				'%d',
+				'%d'
+			) 
+		);
+		$sql = "UPDATE ".$wpdb->prefix."symposium_usermeta SET xp=xp+%d, hp=hp-%d WHERE uid = %d";
+		$wpdb->query( $wpdb->prepare( $sql, $winxp, $windam, $winid));
+		$sql = "UPDATE ".$wpdb->prefix."symposium_usermeta SET hp=hp-%d WHERE uid = %d";
+		$wpdb->query( $wpdb->prepare( $sql, $losedam, $loseid));
+	}
+	
+	function calculate_scores($xp, $hp, $level, $attacker){
+		
+		$xp_seed = $xp * rand (1, 5) +3;
+		$hp_seed = $hp * rand ( 1, 4) + 5;
+		$level_seed = $level * rand ( 1, 3);
+		$score = $xp_seed + $hp_seed + $level_seed;
+		$score = $score * rand (1, 2);
+		return $score;
+	}
+	
+	function WpSymposiumRPG_user_register($user_id){
+		global $wpdb;
+		$wpdb->insert( 
+			$wpdb->base_prefix."symposium_usermeta", 
+			array( 
+				'uid' => $user_id
+			), 
+			array(  
+				'%d' 
+			) 
+		);
+	}
+	
+	function get_current_users_activated(){
+		global $wpdb;
+		$user_ids = $wpdb->get_col(
+			"
+			SELECT	ID
+			FROM $wpdb->users
+			"
+		);
+		foreach ( $user_ids as $id ){
+			if ( $wpdb->get_row("SELECT * FROM ". $wpdb->base_prefix . "symposium_usermeta WHERE uid = ". $id ) == null) {
+				WpSymposiumRPG_user_register($id);
+			}
+		}
+		return null;
+	}
+	
+	function check_tables(){
+		global $wpdb;
+		$sql = "CREATE TABLE IF NOT EXISTS " . $wpdb->base_prefix . "symposium_attack_log (
+				id int(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+				attacker int(11) NOT NULL,
+				defender int(11) NOT NULL,
+				winner int(11) NOT NULL,
+				date TIMESTAMP DEFAULT NOW())";
+		$wpdb->query($sql);
+		if( check_column($wpdb->base_prefix . 'symposium_usermeta','xp') != FALSE){
+			if ( check_column($wpdb->base_prefix . 'symposium_usermeta','hp') != FALSE) {
+				if ( check_column($wpdb->base_prefix . 'symposium_usermeta','level') != FALSE ){
+					if ( check_column($wpdb->base_prefix . 'symposium_usermeta','strength') != FALSE ){
+						if ( check_column($wpdb->base_prefix . 'symposium_usermeta','defense') != FALSE) {
+						return true;
+						}else{
+							create_tables('symposium_usermeta', 'defense');
+							check_tables();
+						}
+					} else{
+						create_tables('symposium_usermeta', 'strength');
+						check_tables();
+					}
+				} else {
+					create_tables('symposium_usermeta', 'level');
+					check_tables();
+				}
+			} else {
+				create_tables('symposium_usermeta', 'hp');
+				check_tables();
+			}
+		} else{
+			create_tables('symposium_usermeta', 'xp');
+			check_tables();
+		}
+		return false;
+	}
+	function check_column($table, $col_name){
+		global $wpdb;
+		if ($table != null){
+			$results = $wpdb->get_results("DESC $table");
+			if ($results != null){
+				foreach ($results as $row ) {
+					if ($row->Field == $col_name) {
+					return true;
+					}
+				}
+				return false;
+			}
+			return false;
+		}
+		return false;
+	}
+	function create_tables($table, $col){
+		global $wpdb;
+		switch ( $table ) {
+			case 'symposium_usermeta':
+				if ( $col == 'xp') {
+						$sql = "ALTER TABLE  `".$wpdb->prefix."symposium_usermeta` ";
+						$sql .= "ADD  `xp` INT NOT NULL DEFAULT  '0' ";
+						if ($wpdb->query( $sql ) != FALSE){
+							return true;
+						} else {
+							$errors[] = "You had an error occur!<br />";
+							$errors[] =  $wpdb->last_error;
+							return false;
+						}
+				} elseif ($col == 'hp'){
+						$sql = "ALTER TABLE  `".$wpdb->prefix."symposium_usermeta` ";
+						$sql .= "ADD  `hp` INT NOT NULL DEFAULT  '100' ";
+						if ($wpdb->query( $sql ) != FALSE){
+							return true;
+						} else {
+							$errors[] = "You had an error occur!<br />";
+							$errors[] =  $wpdb->last_error;
+							return false;
+						}
+				}elseif($col =='level'){
+						$sql = "ALTER TABLE  `".$wpdb->prefix."symposium_usermeta` ";
+						$sql .= "ADD  `level` INT NOT NULL DEFAULT  '1'";
+						if ($wpdb->query( $sql ) != FALSE){
+							return true;
+						} else {
+							$errors[] = "You had an error occur!<br />";
+							$errors[] =  $wpdb->last_error;
+							return false;
+						}
+				}elseif($col == 'defense'){
+						$sql = "ALTER TABLE  `".$wpdb->prefix."symposium_usermeta` ";
+						$sql .= "ADD  `defense` INT NOT NULL DEFAULT  '5' ";
+						if ($wpdb->query( $sql ) != FALSE){
+							return true;
+						} else {
+							$errors[] = "You had an error occur!<br />";
+							$errors[] =  $wpdb->last_error;
+							return false;
+						}
+				}elseif($col == 'strength'){
+						$sql = "ALTER TABLE  `".$wpdb->prefix."symposium_usermeta` ";
+						$sql .= "ADD  `strength` INT NOT NULL DEFAULT  '5' ";
+						if ($wpdb->query( $sql ) != FALSE){
+							return true;
+						} else {
+							$errors[] = "You had an error occur!<br />";
+							$errors[] =  $wpdb->last_error;
+							return false;
+						}
+				}
+			case 'symposium_attack_log':
+			
+		}	
+	}
+	function check_wps_for_rpg(){
+		global $wpdb;
+		$wps_func_url = plugin_dir_path(__FILE__ ). 'wps_files/functions.php' ;
+		if (get_option(WPS_OPTIONS_PREFIX.'_rpg_installed') == "0"){
+			if (copy ( WPS_PLUGIN_DIR.'/functions.php', WPS_PLUGIN_DIR.'/functions.php.bak') != FALSE){
+				unlink(WPS_PLUGIN_DIR.'/functions.php');
+				if (copy($wps_func_url, WPS_PLUGIN_DIR.'/functions.php') != FALSE){
+					return TRUE;
+				}
+			}
+			return false;
+		} else {
+			if (!file_exists( WPS_PLUGIN_DIR. '/functions.php.bak')){
+				if (copy ( WPS_PLUGIN_DIR.'/functions.php', WPS_PLUGIN_DIR.'/functions.php.bak') != FALSE){
+					unlink(WPS_PLUGIN_DIR.'/functions.php');
+					if (copy($wps_func_url, WPS_PLUGIN_DIR.'/functions.php') != FALSE){
+						return TRUE;
+					}else{
+						return false;
+					}
+				}
+			}
+		}
+	}
+
 	//////////////////////////////////
 	// End RPG Functions
 	//////////////////////////////////
