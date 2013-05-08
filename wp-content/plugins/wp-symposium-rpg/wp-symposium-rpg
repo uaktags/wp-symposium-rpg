@@ -2,7 +2,7 @@
 /*
    Plugin Name: WP Symposium RPG
    Plugin URI: http://wordpress.org/extend/plugins/wp-symposium-rpg/
-   Version: 0.1
+   Version: 0.2
    Author: <a href="http://tagsolutions.tk">Tim G.</a>
    Description: RPG Elements added to WPS
    Text Domain: wp-symposium-rpg
@@ -34,6 +34,7 @@
 	/*
 	 * Don't start on every page, the plugin page is enough.
 	 */
+	 
 	 if(is_admin()){
 	    add_action('admin_init', 'RegisterSettings');
 		if ( ! empty ( $GLOBALS['pagenow'] ) && 'plugins.php' === $GLOBALS['pagenow'] )
@@ -253,26 +254,32 @@
 	
 	add_action('symposium_profile_newpost_hook', 'symposium_hook_hack_addStatus');
 	function symposium_hook_hack_addStatus(){
+		global $current_user;
 		symposium_bonus_increment( $current_user->ID, 'profile-status' );
 		return true;
 	}
 	add_action('symposium_profile_like_hook', 'symposium_hook_hack_like');
 	function symposium_hook_hack_like(){
+		global $current_user;
 		symposium_bonus_increment( $current_user->ID, 'like' );
 		return true;
 	}
 	add_action('__wps__forum_newtopic_hook', 'symposium_hook_hack_newthread');
 	function symposium_hook_hack_newthread(){
+		global $current_user;
 		symposium_bonus_increment( $current_user->ID, 'new_thread' );
+		echo "new_thread";
 		return true;
 	}
 	add_action('symposium_forum_reply_hook', 'symposium_hook_hack_newreply');
 	function symposium_hook_hack_newreply(){
+		global $current_user;
 		symposium_bonus_increment( $current_user->ID, 'new_reply' );
 		return true;
 	}
 	add_action('symposium_forum_replycomment_hook', 'symposium_hook_hack_newcommentreply');
 	function symposium_hook_hack_newcommentreply(){
+		global $current_user;
 		symposium_bonus_increment( $current_user->ID, 'new_comment_reply' );
 		return true;
 	}
@@ -336,7 +343,9 @@
 				$html .= "XP: " . $wpsrpg->xp . "<br />";
 				$html .= "Level: " . $wpsrpg->level . "<br />";
 				if ($uid != $current_user->ID && WpSymposiumRPG_is_playing($current_user->ID)){
-					$html .= "<form id='attack' action='" /*. plugins_url('/ajax/attack_functions.php', __FILE__) */ . "' method='post'>";
+					$html .= "<div style='background-color: lightgreen'; id='result'>";
+					$html .= "</div>";
+					$html .= "<form id='attack' action='#' method='post'>";
 					$html .= "<input type='hidden' name='action' value='attack' />";
 					$html .= "<input type='hidden' name='enemy-id' value='".$uid."' />";
 					$html .= "<input type='hidden' name='attacker-id' value='".$current_user->ID."' />";
@@ -371,35 +380,30 @@
 	
 	function __WPS__RPG__js_for_attacks(){
 		echo '<script type="text/javascript">';
-		echo '<!--//--><![CDATA[//><!--';
-		echo '$(document).ready(function() {';
-		echo "$('form#attack').submit(function() {";
-		echo "$('form#attack .error').remove();";
-		echo "var hasError = false;";
-		echo "$('.requiredField').each(function() {";
-		echo "		if($.trim($(this).val()) == '') {";
-		echo "			var labelText = $(this).prev('label').text();";
-		echo "				$(this).parent().append('<span class=";
-		echo '"error"';
-		echo ">Your forgot to enter your '+labelText+'.</span>');";
-		echo "$(this).addClass('inputError');";
-		echo "hasError = true;";
-		echo "} else if($(this).hasClass('email')) {";
-		echo "var emailReg = /^([\w-\.]+@([\w-]+\.)+[\w-]{2,4})?$/;";
-		echo "if(!emailReg.test($.trim($(this).val()))) {";
-		echo "var labelText = $(this).prev('label').text();";
-		echo "$(this).parent().append('<span class=error>Sorry! You\'ve entered an invalid '+labelText+'.</span>');";
-		echo "$(this).addClass('inputError');";
-		echo "hasError = true;";
-		echo "}";
-		echo "}";
-				echo"});";
-				echo"return false;";	
-			echo "});});//-->!]]>";
-			echo "</script>";
+		echo 'jQuery(document).ready(function() {';
+		echo "jQuery('#result').hide();";
+		echo "jQuery('form#attack').submit(function() {";
+		echo " event.preventDefault();";
+		echo " jQuery.ajax({";
+		echo " data: jQuery(this).serialize(),";
+		echo " type: jQuery(this).attr('method'),";
+		echo " url: jQuery(this).attr('action'),";
+		echo " success: function(response) { ";
+		echo " jQuery('#result').show();";
+		echo " jQuery('#result').html(response);}";
+		echo "});";
+		echo "});});";
+		echo "</script>";
 	
 	}
-	
+	function get_user_by_id($id){
+		global $wpdb;
+		$sql = "Select id, user_login from ".$wpdb->base_prefix."users where id = %d";
+		if ( $wpdb->get_row($wpdb->prepare($sql, $id)) != null ) {
+			return $wpdb->get_row($wpdb->prepare($sql, $id));
+		}
+		return false;
+	}
 	function WpSymposiumRPG_Attack($attacker, $defender){
 		global $wpdb;
 		$attack = array();
@@ -424,6 +428,7 @@
 			$attack['max'] = $attack['result']->strength + $attack['result']->defense + 2;
 			$attack['damage'] = rand($attack['min'], $attack['max']);
 			$attack['xp'] = $attack['result']->level * rand(4, 6);
+			return '<p>'. get_user_by_id($attacker)->user_login . ' Won!</p>';
 			update_results_battle($attack['xp'], $attacker, $attack['damage'], $defender, $defend['damage'], $attacker, $defender);
 		} else { //attacker loses
 			$attack['min'] = max(0, ($attack['result']->strength + $attack['result']->defense) - 3);
@@ -433,6 +438,7 @@
 			$defend['max'] = $defend['result']->strength + $defend['result']->defense + 2;
 			$defend['damage'] = rand($defend['min'], $defend['max']);
 			$defend['xp'] = $defend['result']->level * rand( 4, 7);
+			return '<p>'. get_user_by_id($defender)->user_login . ' Won!</p>';
 			update_results_battle($defend['xp'], $defender, $defend['damage'], $attacker, $attacker['damage'], $attacker, $defender);
 		}
 	}
