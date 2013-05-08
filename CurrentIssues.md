@@ -17,3 +17,4 @@ Currently we have the following to fix:
 
 [x] WPS is already compatiable with CubePoints....could we integrate with it? (Fixed: We use the same actions CubePoints uses)
 
+[ ] Attack system needs to be Ajax'd and display a fading message of "Victory" or "Defeat" and then update the stats
